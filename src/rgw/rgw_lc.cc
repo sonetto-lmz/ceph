@@ -841,6 +841,11 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
         }
+        ldpp_dout(wk->get_lc(), 2) << "DELETED: abort_multipart_upload"
+                                   << ", thread:" << wq->thr_name()
+                                   << ", bucket:" << target->get_name()
+                                   << ", meta:" << obj.key 
+                                   << dendl;
       } else {
 	if (ret == -ERR_NO_SUCH_UPLOAD) {
 	  ldpp_dout(wk->get_lc(), 5)

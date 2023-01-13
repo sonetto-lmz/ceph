@@ -6981,8 +6981,13 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.marker_version_id = version_id;
 
   op_ret = del_op->delete_obj(this, y);
-  if (op_ret == -ENOENT) {
-    op_ret = 0;
+  if (op_ret >= 0) {
+    ldpp_dout(this, 5) << "DELETED: bucket=" << bucket->get_name() << ", obj=" << obj->get_oid() << dendl;
+  } else {
+    ldpp_dout(this, 1) << "Error: delete_obj, bucket=" << bucket->get_name() << ", obj=" << obj->get_oid() << ", ret=" << op_ret << dendl;
+    if (op_ret == -ENOENT) {
+      op_ret = 0;
+    }
   }
 
   send_partial_response(o, obj->get_delete_marker(), del_op->result.version_id, op_ret, formatter_flush_cond);
