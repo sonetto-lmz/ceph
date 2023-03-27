@@ -16,6 +16,7 @@
 #include "include/uuid.h"
 
 #include "os/Transaction.h"
+#include "crimson/common/throttle.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
@@ -55,6 +56,7 @@ struct col_obj_ranges_t {
   ghobject_t obj_end;
 };
 
+using coll_core_t = FuturizedStore::coll_core_t;
 class SeaStore final : public FuturizedStore {
 public:
   class MDStore {
@@ -145,7 +147,7 @@ public:
 
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
-  seastar::future<std::vector<coll_t>> list_collections() final;
+  seastar::future<std::vector<coll_core_t>> list_collections() final;
 
   seastar::future<> do_transaction_no_callbacks(
     CollectionRef ch,
@@ -231,9 +233,11 @@ private:
 	transaction_manager->create_transaction(src, tname)),
       std::forward<F>(f),
       [this, op_type](auto &ctx, auto &f) {
-	return ctx.transaction->get_handle().take_collection_lock(
-	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-	).then([&, this] {
+	return throttler.get(1).then([&ctx] {
+	  return ctx.transaction->get_handle().take_collection_lock(
+	    static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
+	  );
+	}).then([&, this] {
 	  return repeat_eagain([&, this] {
 	    ctx.reset_preserve_handle(*transaction_manager);
 	    return std::invoke(f, ctx);
@@ -246,6 +250,8 @@ private:
 	}).then([this, op_type, &ctx] {
 	  add_latency_sample(op_type,
 	      std::chrono::steady_clock::now() - ctx.begin_timestamp);
+	}).finally([this] {
+	  throttler.put();
 	});
       }
     );
@@ -334,6 +340,8 @@ private:
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
+
+  common::Throttle throttler;
 
   using tm_iertr = TransactionManager::base_iertr;
   using tm_ret = tm_iertr::future<>;

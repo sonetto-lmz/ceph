@@ -1246,11 +1246,12 @@ void PG::requeue_op(OpRequestRef op)
 {
   auto p = waiting_for_map.find(op->get_source());
   if (p != waiting_for_map.end()) {
-    dout(20) << __func__ << " " << op << " (waiting_for_map " << p->first << ")"
+    dout(20) << __func__ << " " << *op->get_req()
+             << " (waiting_for_map " << p->first << ")"
 	     << dendl;
     p->second.push_front(op);
   } else {
-    dout(20) << __func__ << " " << op << dendl;
+    dout(20) << __func__ << " " << *op->get_req() << dendl;
     osd->enqueue_front(
       OpSchedulerItem(
         unique_ptr<OpSchedulerItem::OpQueueable>(new PGOpItem(info.pgid, op)),
@@ -1745,8 +1746,8 @@ void PG::on_new_interval()
   m_scrubber->on_primary_change(__func__, m_planned_scrub);
 }
 
-epoch_t PG::oldest_stored_osdmap() {
-  return osd->get_superblock().oldest_map;
+epoch_t PG::cluster_osdmap_trim_lower_bound() {
+  return osd->get_superblock().cluster_osdmap_trim_lower_bound;
 }
 
 OstreamTemp PG::get_clog_info() {
